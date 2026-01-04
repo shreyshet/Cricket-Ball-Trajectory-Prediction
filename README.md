@@ -38,12 +38,16 @@ This logic is carried over from the repo: (https://github.com/kushagra3204/Crick
 
 - Blue Line: Historical path (last 10 frames).
 - Green Line: Predicted future path.
+- White dots: Kalman predictions
 - Red Circles: Current and predicted centroids.
 - Red Bounding Box: YOLO11 detection area.
 
 ## Ongoing work...
 Here are some of the problems, and future work shall investigate them.
 1. In gully cricket, the ball often travels at high speed (~70-100 kmph), which causes motion blur. Also the small size of the ball makes it difficult to detect the ball at a far distance.
-2. When the ball is near the bounce, the current model loses tracking. This can cause problems for detecting an LBW. Future work.   
+2. When the ball is near the bounce, the current model loses tracking. This can cause problems for detecting an LBW. Future work.
+3. Added Kalman filter. It smooths the velocity when it get stable. This is better than the naive tracking. However KF doesnot detect a bounce. which cause the filter to lag/deviate from real ball right after the bounce
+   ![Kalman vs naive tracking](images/kalman_vs_naive_prediction.png)
+4. Check the videos in the videos folder to see the performance so far.
 
 
