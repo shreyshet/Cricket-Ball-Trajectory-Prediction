@@ -46,8 +46,39 @@ This logic is carried over from the repo: (https://github.com/kushagra3204/Crick
 Here are some of the problems, and future work shall investigate them.
 1. In gully cricket, the ball often travels at high speed (~70-100 kmph), which causes motion blur. Also the small size of the ball makes it difficult to detect the ball at a far distance.
 2. When the ball is near the bounce, the current model loses tracking. This can cause problems for detecting an LBW. Future work.
-3. Added Kalman filter. It smooths the velocity when it get stable. This is better than the naive tracking. However KF doesnot detect a bounce. which cause the filter to lag/deviate from real ball right after the bounce
+3. [x] Added Kalman filter. It smooths the velocity when it get stable. This is better than the naive tracking. However KF doesnot detect a bounce. which cause the filter to lag/deviate from real ball right after the bounce
+
    ![Kalman vs naive tracking](images/kalman_vs_naive_prediction.png)
-4. Check the videos in the videos folder to see the performance so far.
+   
+   Hence to correct this, a bounce detection is added with the logic as below:
+   ```python
+   p_pprev = centroid_list[-3]  # Point 1
+   p_prev = centroid_list[-2]  # Point 2 (Vertex)
+   p_curr = centroid_list[-1]  # Point 3
+
+   angle = calculate_interior_angle(p_pprev, p_prev, p_curr)
+
+   # Threshold for a bounce: if the angle is sharper than 135 degrees
+   # (Adjust this based on how fast/bouncy your ball is)
+   if angle < 135:
+       print(f"--- BOUNCE DETECTED (Angle: {angle:.2f}) ---")
+       # 1. Calculate the actual measured velocity (difference)
+       meas_vx = centroid_list[-1][0] - centroid_list[-2][0]
+       meas_vy = centroid_list[-1][1] - centroid_list[-2][1]
+       # 2. Inject this directly into the Kalman Filter's POST-correction state
+       # In OpenCV, statePost[2] is vx and statePost[3] is vy for a 4-state model
+       kf.statePost[2] = meas_vx
+       kf.statePost[3] = meas_vy
+       # 3. (Optional) Force the position to match the measurement exactly for that frame
+       kf.statePost[0] = centroid_x
+       kf.statePost[1] = centroid_y
+   ```
+   
+   When the ball bounce is detected, the KF is simply using the measured position to track.
+
+   ![Kalman vs naive tracking](images/t1_bounce_detected_vx_vy_corrected.png)
+
+   
+5. Check the videos in the videos folder to see the performance so far.
 
 
