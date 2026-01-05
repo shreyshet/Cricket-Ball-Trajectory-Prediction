@@ -1,0 +1,4 @@
+train: cricket_ball_data/train/images
+val: cricket_ball_data/valid/images
+nc: 1
+names: ["cricket_ball"]

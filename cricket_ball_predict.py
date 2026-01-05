@@ -9,13 +9,28 @@ import matplotlib.pyplot as plt
 
 
 
-def angle_between_lines(m1, m2=1):
-    if m1 != -1 / m2:
-        angle = math.degrees(math.atan(abs((m2 - m1) / (1 + m1 * m2))))
-        return angle
-    else:
-        return 90.0
 
+def calculate_interior_angle(p1, p2, p3):
+    """
+    Calculates the interior angle at point p2 (the middle point).
+    Points p1, p2, p3 are tuples/lists of (x, y).
+    """
+    # Vectors from p2
+    v1 = (p1[0] - p2[0], p1[1] - p2[1])
+    v2 = (p3[0] - p2[0], p3[1] - p2[1])
+
+    # Calculate absolute angles of the two vectors
+    angle1 = math.atan2(v1[1], v1[0])
+    angle2 = math.atan2(v2[1], v2[0])
+
+    # Difference between the two angles
+    diff = abs(math.degrees(angle1 - angle2))
+
+    # Ensure we get the smaller interior angle
+    if diff > 180:
+        diff = 360 - diff
+
+    return diff
 
 class FixedSizeQueue:
     def __init__(self, max_size):
@@ -39,8 +54,8 @@ class FixedSizeQueue:
 
 model = YOLO("runs/detect/train9/weights/best.pt")
 
-video_name = "test1"
-video_path = "../home_balldrop_vids/" + video_name + ".mp4"
+video_name = "t1"
+video_path = "../home_balldrop_vids/white_ball/60fps/" + video_name + ".mp4"
 output_path = '../home_balldrop_vids/white_ball/60fps/out/output_kf_' + video_name + '.mp4'
 
 cap = cv2.VideoCapture(video_path)
@@ -82,15 +97,13 @@ measured_x, measured_y = [], []
 kf_predicted_x, kf_predicted_y = [], []
 naive_predicted_x, naive_predicted_y = [], []
 frame_count = 0
+prev_angle = 0.0
+v2 = np.array([-1, -1])
 
 while ret:
     ret, frame = cap.read()
 
-
     if ret:
-
-
-
         new_frame_time = time.time()
         fps = 1 / (new_frame_time - prev_frame_time)
         prev_frame_time = new_frame_time
@@ -120,7 +133,6 @@ while ret:
         if len(box) != 0:
             for i in range(rows):
 
-
                 x1, y1, x2, y2 = box[i]
                 x1, y1, x2, y2 = x1.item(), y1.item(), x2.item(), y2.item()
 
@@ -141,27 +153,37 @@ while ret:
                 # if math.sqrt(y_diff**2+x_diff**2)<7:
                 cv2.line(frame, centroid_history.get_queue()[i - 1], centroid_history.get_queue()[i], (255, 0, 0), 4)
 
+        if len(centroid_history) >= 3:
+            p_pprev = centroid_list[-3]  # Point 1
+            p_prev = centroid_list[-2]  # Point 2 (Vertex)
+            p_curr = centroid_list[-1]  # Point 3
+
+            angle = calculate_interior_angle(p_pprev, p_prev, p_curr)
+
+            # Threshold for a bounce: if the angle is sharper than 135 degrees
+            # (Adjust this based on how fast/bouncy your ball is)
+            if angle < 135:
+                print(f"--- BOUNCE DETECTED (Angle: {angle:.2f}) ---")
+                # 1. Calculate the actual measured velocity (difference)
+                meas_vx = centroid_list[-1][0] - centroid_list[-2][0]
+                meas_vy = centroid_list[-1][1] - centroid_list[-2][1]
+                # 2. Inject this directly into the Kalman Filter's POST-correction state
+                # In OpenCV, statePost[2] is vx and statePost[3] is vy for a 4-state model
+                kf.statePost[2] = meas_vx
+                kf.statePost[3] = meas_vy
+                # 3. (Optional) Force the position to match the measurement exactly for that frame
+                kf.statePost[0] = centroid_x
+                kf.statePost[1] = centroid_y
+
         if len(centroid_history) > 1:
             centroid_list = list(centroid_history.get_queue())
 
             x_diff = centroid_list[-1][0] - centroid_list[-2][0]
             y_diff = centroid_list[-1][1] - centroid_list[-2][1]
-            # Calculate average velocity over the last few points
-            avg_x_diff = (centroid_list[-1][0] - centroid_list[-2][0]) / len(centroid_list)
-            avg_y_diff = (centroid_list[-1][1] - centroid_list[-2][1]) / len(centroid_list)
-
-            if (x_diff != 0):
-                m1 = y_diff / x_diff
-                if m1 == 1:
-                    angle = 90
-                elif m1 != 0:
-                    angle = 90 - angle_between_lines(m1)
-                if angle >= 45:
-                    print("ball bounced")
 
             # Naive Predictions
             future_positions = [centroid_list[-1]]
-            print("Naive Future Positions: ", future_positions[0])  # Naive
+            #print("Naive Future Positions: ", future_positions[0])  # Naive
             naive_pred_x, naive_pred_y = future_positions[0]
 
             for i in range(1, 5):
@@ -184,6 +206,7 @@ while ret:
                 future_kf = np.dot(kf.transitionMatrix, future_kf)
                 f_x, f_y = int(future_kf[0]), int(future_kf[1])
                 cv2.circle(frame, (f_x, f_y), 2, color=(255, 255, 255), thickness=-1)
+
 
 
 
@@ -211,8 +234,8 @@ while ret:
         measured_y.append(centroid_y)
 
         # Save KF prediction
-        kf_predicted_x.append(pred_x)
-        kf_predicted_y.append(pred_y)
+        kf_predicted_x.append(kf.statePost[0])
+        kf_predicted_y.append(kf.statePost[1])
 
         # Save Naive prediction (from previous code)
         naive_predicted_x.append(naive_pred_x)
